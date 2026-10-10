@@ -25,7 +25,7 @@ body {
   overflow-x: hidden;
   background: var(--bg);
   color: var(--ink);
-  font-family: var(--font-mono);
+  font-family: "DM Sans", "Segoe UI", Arial, sans-serif;
   font-size: 16px;
   line-height: 1.55;
   letter-spacing: 0;
@@ -545,7 +545,12 @@ h1 {
 
 h1,
 h2 {
-  font-family: "League Spartan", "DM Sans", sans-serif;
+  font-family: var(--font-pixel);
+}
+
+.page-heading h1 {
+  font-size: clamp(46px, 6.4vw, 88px);
+  line-height: 1;
 }
 
 .presentation-hero {
@@ -619,7 +624,7 @@ h2 {
 
 .deck-section h2 {
   margin: 0 0 24px;
-  font-family: "League Spartan", "DM Sans", sans-serif;
+  font-family: var(--font-pixel);
   font-size: clamp(34px, 4.4vw, 62px);
   font-weight: 700;
   line-height: 1.04;
@@ -757,9 +762,9 @@ h2 {
 
 /* Text-first assignment and presentation layout */
 body[data-page="assignment"] .page-heading {
-  max-width: 980px;
-  grid-template-columns: 1fr;
-  gap: 22px;
+  max-width: none;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 420px);
+  gap: 48px;
 }
 
 body[data-page="assignment"] .page-heading .kicker {
@@ -767,8 +772,8 @@ body[data-page="assignment"] .page-heading .kicker {
 }
 
 body[data-page="assignment"] .page-heading .lead {
-  max-width: 720px;
-  margin-bottom: 0;
+  max-width: 430px;
+  margin-bottom: 7px;
 }
 
 .text-stream {
@@ -805,7 +810,7 @@ body[data-page="assignment"] .page-heading .lead {
 .stream-item h2 {
   max-width: 920px;
   margin: 0 0 20px;
-  font-family: var(--font-display);
+  font-family: var(--font-pixel);
   font-size: clamp(30px, 4.5vw, 58px);
   font-weight: 700;
   line-height: 1.02;
@@ -922,5 +927,17 @@ body[data-page="assignment"] .page-heading .lead {
   .stream-item p,
   .stream-item li {
     font-size: 13px;
+  }
+}
+
+@media (max-width: 760px) {
+  body[data-page="assignment"] .page-heading {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  body[data-page="assignment"] .page-heading h1,
+  .page-heading h1 {
+    font-size: clamp(34px, 8.5vw, 56px);
   }
 }
