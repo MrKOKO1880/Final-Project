@@ -1,6 +1,6 @@
 # Final Project
 
-A framework-free four-page portfolio site ready for GitHub Pages.
+A framework-free five-page portfolio site ready for GitHub Pages.
 
 Target repository: `https://github.com/MrKOKO1880/Final-Project`
 
@@ -9,6 +9,7 @@ Target repository: `https://github.com/MrKOKO1880/Final-Project`
 - `index.html` - Home
 - `project.html` - Project
 - `assignment.html` - Assignment
+- `presentation.html` - Individual Presentation slide surface
 - `about.html` - About Me
 
 ## Local preview
