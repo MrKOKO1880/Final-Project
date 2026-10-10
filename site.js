@@ -46,3 +46,34 @@ if (navContainer) {
     </div>
   `;
 }
+
+const presentationSlides = [...document.querySelectorAll(".presentation-slide")];
+const slideCounter = document.querySelector("[data-slide-counter]");
+const previousSlideButton = document.querySelector("[data-slide-prev]");
+const nextSlideButton = document.querySelector("[data-slide-next]");
+let currentSlide = 0;
+
+const showSlide = (index) => {
+  if (!presentationSlides.length) return;
+
+  currentSlide = (index + presentationSlides.length) % presentationSlides.length;
+  presentationSlides.forEach((slide, slideIndex) => {
+    slide.classList.toggle("is-active", slideIndex === currentSlide);
+  });
+
+  if (slideCounter) {
+    slideCounter.textContent = `${String(currentSlide + 1).padStart(2, "0")} / ${String(
+      presentationSlides.length,
+    ).padStart(2, "0")}`;
+  }
+};
+
+previousSlideButton?.addEventListener("click", () => showSlide(currentSlide - 1));
+nextSlideButton?.addEventListener("click", () => showSlide(currentSlide + 1));
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowLeft") showSlide(currentSlide - 1);
+  if (event.key === "ArrowRight") showSlide(currentSlide + 1);
+});
+
+showSlide(0);
