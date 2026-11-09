@@ -1,0 +1,1626 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>Twilight Faces · 暮光面孔</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#181b3d">
+<meta name="description" content="Net Art 2.0 — 用 MediaPipe FaceMesh 把黄昏的圆环放回你的五官上。">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23181b3d'/%3E%3Ccircle cx='32' cy='32' r='18' fill='none' stroke='%23ffb060' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='6' fill='%23ff8a5c'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --ink:#f7eadc;
+    --dim:rgba(247,234,220,.56);
+    --faint:rgba(247,234,220,.28);
+    --line:rgba(247,234,220,.16);
+    --ember:#ff9f68;
+    --gold:#ffc46b;
+    --rose:#ef7f86;
+    --mono:"Cascadia Mono","IBM Plex Mono","SFMono-Regular",Consolas,"Liberation Mono",monospace;
+    --serif:"Bodoni MT","Didot","Playfair Display",Georgia,"Times New Roman","Songti SC",SimSun,serif;
+    --sans:"Helvetica Neue","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;background:#12142c;color:var(--ink);overflow:hidden;
+    font-family:var(--sans);-webkit-font-smoothing:antialiased;
+  }
+  #stage{
+    position:fixed;inset:0;z-index:0;
+    background:
+      radial-gradient(110% 85% at 74% 66%, rgba(255,152,92,.24) 0%, rgba(255,140,90,.10) 32%, rgba(255,140,90,0) 60%),
+      radial-gradient(90% 70% at 16% 8%, rgba(96,82,172,.34) 0%, rgba(96,82,172,0) 62%),
+      linear-gradient(180deg,#161936 0%,#221e47 24%,#452d5b 55%,#7d3a5f 79%,#b15253 100%);
+  }
+  #veil{
+    position:fixed;inset:0;z-index:2;pointer-events:none;
+    background:
+      radial-gradient(125% 95% at 50% 44%, rgba(8,8,24,0) 38%, rgba(8,8,24,.30) 72%, rgba(8,8,24,.62) 100%),
+      linear-gradient(180deg, rgba(8,8,24,.34) 0%, rgba(8,8,24,0) 18%, rgba(8,8,24,0) 78%, rgba(8,8,24,.46) 100%);
+  }
+  canvas{position:fixed !important;left:0;top:0;z-index:1;pointer-events:none;display:block}
+
+  /* ---------------- intro ---------------- */
+  #intro{
+    position:fixed;inset:0;z-index:30;display:flex;align-items:center;
+    padding:clamp(24px,7vw,110px);
+    background:
+      linear-gradient(90deg, rgba(9,9,26,.90) 0%, rgba(9,9,26,.72) 34%, rgba(9,9,26,.22) 68%, rgba(9,9,26,0) 100%),
+      linear-gradient(180deg, rgba(9,9,26,.35), rgba(9,9,26,.10) 40%, rgba(9,9,26,.55));
+    transition:opacity .9s ease, visibility .9s;
+    overflow:auto;
+  }
+  #intro.is-gone{opacity:0;visibility:hidden;pointer-events:none}
+  .intro__inner{max-width:820px;transform:translateY(1vh)}
+  .kicker{
+    display:flex;align-items:center;gap:14px;margin:0 0 clamp(22px,4vh,44px);
+    font-family:var(--mono);font-size:10px;letter-spacing:.34em;color:var(--dim);text-transform:uppercase;
+  }
+  .kicker::before{content:"";width:52px;height:1px;background:var(--line)}
+  h1{
+    margin:0;font-family:var(--serif);font-weight:400;
+    font-size:clamp(3.3rem,10.4vw,9.6rem);line-height:.82;letter-spacing:.005em;
+    text-transform:uppercase;color:#fdf1e3;
+    text-shadow:0 0 70px rgba(255,150,100,.20);
+  }
+  h1 span{display:block}
+  h1 span:last-child{margin-left:.06em;color:transparent;-webkit-text-stroke:1px rgba(253,241,227,.82)}
+  .title-cn{
+    margin:.55em 0 0;font-family:var(--serif);font-size:clamp(1.2rem,2.4vw,1.9rem);
+    letter-spacing:.62em;color:var(--gold);text-indent:.3em;
+  }
+  .lead{
+    max-width:36em;margin:clamp(26px,4.6vh,48px) 0 0;
+    font-family:var(--serif);font-size:clamp(.98rem,1.45vw,1.22rem);line-height:1.95;
+    color:rgba(247,234,220,.86);
+  }
+  .hintline{
+    max-width:32em;margin:16px 0 0;font-size:12.5px;line-height:1.9;letter-spacing:.04em;color:var(--dim);
+  }
+  .actions{display:flex;flex-wrap:wrap;gap:14px;margin:clamp(28px,5vh,46px) 0 0}
+  .btn{
+    appearance:none;cursor:pointer;font-family:var(--mono);font-size:11px;letter-spacing:.16em;
+    padding:15px 22px;border:1px solid var(--line);background:transparent;color:var(--ink);
+    transition:background .25s,border-color .25s,color .25s,transform .25s;
+  }
+  .btn:hover{border-color:rgba(255,196,107,.65);transform:translateY(-2px)}
+  .btn:disabled{opacity:.55;cursor:wait;transform:none}
+  .btn span{opacity:.5;margin-left:10px;font-size:9px}
+  .btn--primary{
+    background:linear-gradient(100deg,#ffb066,#ff8f6a 55%,#ef7f86);
+    border-color:transparent;color:#241626;font-weight:700;
+    box-shadow:0 10px 40px rgba(255,130,90,.22);
+  }
+  .btn--primary:hover{box-shadow:0 14px 50px rgba(255,140,90,.34)}
+  .btn--ghost{color:var(--dim);border-color:var(--line)}
+  .demo-line{
+    margin:20px 0 0;font-family:var(--mono);font-size:10px;letter-spacing:.12em;
+  }
+  .demo-line a{
+    color:rgba(255,196,107,.78);text-decoration:none;
+    border-bottom:1px dashed rgba(255,196,107,.35);padding-bottom:3px;
+    transition:color .2s,border-color .2s;
+  }
+  .demo-line a:hover{color:#ffd9a0;border-bottom-color:rgba(255,196,107,.8)}
+  .status{
+    margin:16px 0 0;min-height:1.4em;font-family:var(--mono);font-size:10px;
+    letter-spacing:.14em;color:rgba(255,196,107,.8);
+  }
+  .privacy{
+    margin:clamp(18px,3.4vh,34px) 0 0;font-family:var(--mono);font-size:9px;
+    letter-spacing:.13em;color:var(--faint);line-height:1.9;text-transform:uppercase;
+  }
+  .privacy span{color:rgba(255,196,107,.55)}
+
+  /* ---------------- hud ---------------- */
+  #hud{
+    position:fixed;inset:0;z-index:20;pointer-events:none;display:flex;flex-direction:column;
+    justify-content:space-between;padding:clamp(16px,2.4vw,34px);
+    opacity:1;transition:opacity .9s ease;
+  }
+  #hud.is-hidden{opacity:0;pointer-events:none}
+  .hud__top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px}
+  .brand{font-family:var(--mono);font-size:10px;letter-spacing:.26em;color:rgba(247,234,220,.78);text-shadow:0 1px 12px rgba(8,8,24,.85)}
+  .brand em{font-style:normal;color:var(--gold);letter-spacing:.3em;margin-left:12px;font-size:9px}
+  .brand small{display:block;margin-top:7px;font-size:8px;letter-spacing:.2em;color:var(--faint)}
+  .live{
+    display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:9px;
+    letter-spacing:.22em;color:var(--dim);white-space:nowrap;
+  }
+  .live i{
+    width:6px;height:6px;border-radius:50%;background:#8b8fb0;box-shadow:0 0 0 0 rgba(255,196,107,0);
+    transition:background .3s, box-shadow .3s;
+  }
+  .live.is-on i{background:#ffc46b;box-shadow:0 0 12px 2px rgba(255,170,100,.65);animation:pulse 2.4s infinite}
+  .live.is-warn i{background:#ff9f68;box-shadow:0 0 10px rgba(255,150,90,.5)}
+  .live.is-off i{background:#6c6f92}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .hud__bottom{display:flex;justify-content:space-between;align-items:flex-end;gap:24px}
+  .modes{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;max-width:70vw}
+  .modes span{
+    font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:rgba(247,234,220,.30);
+    transition:color .4s;display:flex;align-items:baseline;gap:7px;
+  }
+  .modes span em{font-style:normal;font-family:var(--sans);font-size:9px;letter-spacing:.1em;opacity:.72}
+  .modes span.is-on{color:var(--gold)}
+  .modes span.is-on em{color:rgba(255,196,107,.7)}
+  .modes span.is-on::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px var(--gold);align-self:center}
+  .mode-note{
+    font-family:var(--mono);font-size:8px;letter-spacing:.2em;color:rgba(247,234,220,.24);
+    margin-left:4px;padding-left:14px;border-left:1px solid var(--line);
+  }
+  .keys{font-family:var(--mono);font-size:8px;letter-spacing:.14em;color:rgba(247,234,220,.30);text-align:right;line-height:1.9}
+  .keys b{color:rgba(255,196,107,.6);font-weight:400;margin-left:8px}
+  .cam-toggle{
+    position:absolute;right:clamp(16px,2.4vw,34px);bottom:clamp(96px,12vh,124px);
+    pointer-events:auto;cursor:pointer;background:rgba(12,10,30,.55);color:var(--ink);
+    border:1px solid var(--line);font-family:var(--mono);font-size:9px;letter-spacing:.16em;
+    padding:10px 14px;backdrop-filter:blur(6px);transition:opacity .4s,border-color .3s;
+  }
+  .cam-toggle:hover{border-color:rgba(255,196,107,.55)}
+  .cam-toggle.is-hidden{display:none}
+
+  #toast{
+    position:fixed;left:50%;top:clamp(58px,8vh,84px);transform:translate(-50%,-8px);
+    z-index:40;pointer-events:none;opacity:0;transition:opacity .35s,transform .35s;
+    background:rgba(10,9,26,.78);border:1px solid rgba(247,234,220,.14);
+    padding:11px 18px;font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;line-height:1.7;
+    color:rgba(247,234,220,.82);max-width:min(86vw,560px);text-align:center;backdrop-filter:blur(8px);
+  }
+  #toast.show{opacity:1;transform:translate(-50%,0)}
+
+  @media (max-width:760px){
+    #intro{padding:26px 22px;align-items:flex-end;padding-bottom:max(30px,8vh);
+      background:linear-gradient(180deg,rgba(9,9,26,.25),rgba(9,9,26,.55) 45%,rgba(9,9,26,.9))}
+    .intro__inner{transform:none}
+    .kicker{margin-bottom:20px;font-size:8px;letter-spacing:.26em}
+    h1{font-size:clamp(3rem,15vw,5rem)}
+    .title-cn{letter-spacing:.42em;font-size:1rem}
+    .lead{font-size:.95rem;line-height:1.8}
+    .hintline{display:none}
+    .actions{gap:10px}
+    .btn{padding:13px 16px;font-size:10px}
+    .privacy{font-size:8px}
+    .hud__bottom{flex-direction:column;align-items:flex-start;gap:12px}
+    .modes{max-width:100%;gap:4px 12px}
+    .modes span{font-size:8px}
+    .modes span em{display:none}
+    .mode-note{display:none}
+    .keys{text-align:left;font-size:7.5px}
+    .brand{font-size:8.5px}
+    .brand em{display:none}
+    .cam-toggle{right:16px;bottom:70px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001s !important;transition-duration:.15s !important}
+  }
+</style>
+</head>
+<body>
+<div id="stage" aria-hidden="true"></div>
+<div id="veil" aria-hidden="true"></div>
+
+<main id="intro">
+  <div class="intro__inner">
+    <p class="kicker">Net Art 2.0 · Creative Coding</p>
+    <h1><span>Twilight</span><span>Faces</span></h1>
+    <p class="title-cn">暮光面孔</p>
+    <p class="lead">摄像头会认出你的 478 个面部关键点，让原本漂流在暮色里的圆环，一颗一颗落回你的眼睛、鼻尖和嘴唇。</p>
+    <p class="hintline">张嘴，它们围成一个圆；微笑，它们弯成一道弧；闭眼，它们拉成两条线；撅嘴，它们缩成两枚小环；扬眉，它们升成一圈光环。</p>
+    <div class="actions">
+      <button id="enter" class="btn btn--primary" type="button">开启摄像头<span>Allow camera</span></button>
+      <button id="skip" class="btn btn--ghost" type="button">无摄像头预览</button>
+    </div>
+    <p class="status" id="bootStatus">正在准备画布…</p>
+    <p class="demo-line"><a href="?image=./assets/demo-portrait.jpg&amp;ghost=1">没有摄像头？用一张示例照片体验 →</a></p>
+    <p class="privacy">All processing happens in your browser. Nothing is uploaded or recorded. · <span>Local only</span></p>
+  </div>
+</main>
+
+<aside id="hud" class="is-hidden" aria-label="artwork interface">
+  <div class="hud__top">
+    <div class="brand">
+      Twilight Faces <em>暮光面孔</em>
+      <small>478 Landmarks · 52 Blendshapes · Local</small>
+    </div>
+    <div class="live" id="live"><i></i><span id="liveText">Standby</span></div>
+  </div>
+  <div class="hud__bottom">
+    <div class="modes" id="modeBar">
+      <span data-mode="REST">REST<em>静息</em></span>
+      <span data-mode="RING">RING<em>张嘴</em></span>
+      <span data-mode="SMILE">SMILE<em>微笑</em></span>
+      <span data-mode="BLINK">BLINK<em>闭眼</em></span>
+      <span data-mode="KISS">KISS<em>撅嘴</em></span>
+      <span data-mode="AWE">AWE<em>扬眉</em></span>
+      <span class="mode-note" id="modeNote">Auto</span>
+    </div>
+    <div class="keys">
+      V 影像 <b>M</b> 网格 <b>S</b> 保存 <b>H</b> 界面<br>
+      C 摄像头 <b>1–6</b> 手动表情 <b>0</b> 自动
+    </div>
+  </div>
+  <button id="camToggle" class="cam-toggle is-hidden" type="button">◉ 开启摄像头</button>
+</aside>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="./vendor/p5/p5.min.js"></script>
+<script>
+/* =====================================================================
+   TWILIGHT FACES · 暮光面孔
+   p5.js + MediaPipe FaceLandmarker (478 landmarks / 52 blendshapes)
+   The 164 rings that drift in the dusk gather on your face and rearrange
+   themselves according to your expression.
+   ===================================================================== */
+(() => {
+  'use strict';
+
+  // ---------------------------------------------------------------- config
+  const PARAMS = new URLSearchParams(location.search);
+  const STILL_URL = PARAMS.get('image');
+  const FORCED_PARAM = (PARAMS.get('mode') || '').toUpperCase();
+  const GHOST_PARAM = PARAMS.get('ghost');
+
+  const PAL = {
+    ember:   [244, 140, 92],
+    amber:   [250, 184, 82],
+    rose:    [224, 112, 116],
+    mauve:   [190, 104, 154],
+    lav:     [164, 138, 214],
+    peri:    [112, 124, 214],
+    peach:   [238, 151, 102],
+    cream:   [255, 214, 170],
+    gold:    [255, 198, 110]
+  };
+  const AMBER = PAL.amber, EMBER = PAL.ember, ROSE = PAL.rose,
+        LAV = PAL.lav, PERI = PAL.peri, CREAM = PAL.cream, GOLD = PAL.gold;
+
+  const MODES = ['REST','RING','SMILE','BLINK','KISS','AWE'];
+  const MODE_LABEL = {
+    REST:'静息', RING:'张嘴 · 圆', SMILE:'微笑 · 弧', BLINK:'闭眼 · 线',
+    KISS:'撅嘴 · 双环', AWE:'扬眉 · 光环', AMBIENT:'漂流'
+  };
+  const FACE_OVAL = [
+    10,338,297,332,284,251,389,356,454,323,361,288,397,365,379,378,400,377,
+    152,148,176,149,150,136,172,58,132,93,234,127,162,21,54,103,67,109
+  ];
+  const GROUP_DEF = [
+    { key:'eyeA',  n:22, col:PAL.gold  },
+    { key:'eyeB',  n:22, col:PAL.gold  },
+    { key:'mouth', n:38, col:PAL.ember },
+    { key:'nose',  n:12, col:PAL.cream },
+    { key:'browA', n:7,  col:PAL.peach },
+    { key:'browB', n:7,  col:PAL.peach },
+    { key:'oval',  n:56, col:PAL.lav   }
+  ];
+  const N_ORBS = GROUP_DEF.reduce((a,g) => a + g.n, 0);
+
+  const MODEL_LOCAL = new URL('./models/face_landmarker.task', location.href).href;
+  const MODEL_CDN = 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task';
+  const WASM_LOCAL = new URL('./vendor/mediapipe/wasm', location.href).href;
+  const WASM_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm';
+  const BUNDLE_LOCAL = new URL('./vendor/mediapipe/vision_bundle.mjs', location.href).href;
+  const BUNDLE_CDN = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs';
+
+  // ---------------------------------------------------------------- dom
+  const els = {
+    intro: document.getElementById('intro'),
+    hud: document.getElementById('hud'),
+    enter: document.getElementById('enter'),
+    skip: document.getElementById('skip'),
+    boot: document.getElementById('bootStatus'),
+    live: document.getElementById('live'),
+    liveText: document.getElementById('liveText'),
+    modeBar: document.getElementById('modeBar'),
+    modeNote: document.getElementById('modeNote'),
+    toast: document.getElementById('toast'),
+    camToggle: document.getElementById('camToggle')
+  };
+
+  // ---------------------------------------------------------------- state
+  const vision = {
+    video:null, stream:null, landmarker:null, loading:null, modelOK:false,
+    latest:null, lastVideoTime:-1, lastDetect:0, errors:0,
+    still:null, stillCanvas:null, stillDetected:false,
+    ghostCanvas:null, ghostCtx:null, ghostW:0, ghostH:0,
+    cameraDenied:false, cameraError:''
+  };
+
+  const face = {
+    ok:false, active:false, alpha:0, raw:null, s:null,
+    lastSeen:-1e9, staticSource:false, bounds:null
+  };
+
+  const bs = { jaw:0, funnel:0, pucker:0, smile:0, blink:0, wide:0, brow:0 };
+  const bsTarget = { ...bs };
+
+  let faceMode = 'AMBIENT';
+  let faceModeAt = 0;
+  let forcedMode = null;
+  let modeCand = null;
+  let modeCandAt = 0;
+  // A natural blink lasts ~120ms, shorter than the mode dwell time. Latch it so
+  // the two eyelid lines actually get a chance to appear.
+  let blinkHoldAt = -1e9;
+
+  let orbs = [];
+  let dust = [];
+  let ghostOn = GHOST_PARAM !== '0';
+  let meshOn = false;
+  let hudOn = true;
+  let experienceStarted = false;
+  let startInFlight = false;
+  let skipRequested = false;
+  let lastFrame = 0;
+  let processedAt = -1;
+  let bootReadyAt = 0;
+  let toastTimer = 0;
+  let fps = 60;
+
+  // ---------------------------------------------------------------- utils
+  const clamp01 = v => v < 0 ? 0 : v > 1 ? 1 : v;
+  const mix = (a,b,t) => a + (b-a)*t;
+  const mixP = (dst, src, k) => { dst.x = mix(dst.x, src.x, k); dst.y = mix(dst.y, src.y, k); };
+  const rgbStr = c => 'rgb(' + (c[0]|0) + ',' + (c[1]|0) + ',' + (c[2]|0) + ')';
+  function mixRGB(a, b, t){
+    t = clamp01(t);
+    return [ mix(a[0],b[0],t), mix(a[1],b[1],t), mix(a[2],b[2],t) ];
+  }
+  function easeSmooth(t){ t = clamp01(t); return t*t*(3-2*t); }
+
+  function resample(points, n, closed){
+    const src = closed ? points.concat([points[0]]) : points.slice();
+    if (src.length < 2) return src.slice(0, n);
+    const lens = [0];
+    let total = 0;
+    for (let i=1;i<src.length;i++){
+      total += Math.hypot(src[i].x - src[i-1].x, src[i].y - src[i-1].y);
+      lens.push(total);
+    }
+    const out = [];
+    let seg = 1;
+    for (let i=0;i<n;i++){
+      const target = total * (closed ? i/n : i/(n-1));
+      while (seg < lens.length-1 && lens[seg] < target) seg++;
+      const l0 = lens[seg-1], l1 = lens[seg];
+      const t = l1 > l0 ? (target-l0)/(l1-l0) : 0;
+      out.push({
+        x: mix(src[seg-1].x, src[seg].x, t),
+        y: mix(src[seg-1].y, src[seg].y, t)
+      });
+    }
+    return out;
+  }
+
+  function samplePath(points, u, closed){
+    if (!points || !points.length) return {x:0,y:0};
+    if (closed){
+      const f = ((u % 1) + 1) % 1 * points.length;
+      const i = Math.floor(f), t = f - i;
+      const a = points[i % points.length], b = points[(i+1) % points.length];
+      return { x: mix(a.x,b.x,t), y: mix(a.y,b.y,t) };
+    }
+    const f = clamp01(u) * (points.length - 1);
+    const i = Math.min(points.length-2, Math.floor(f)), t = f - i;
+    const a = points[i], b = points[Math.min(points.length-1,i+1)];
+    return { x: mix(a.x,b.x,t), y: mix(a.y,b.y,t) };
+  }
+
+  function toast(msg, ms){
+    els.toast.textContent = msg;
+    els.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => els.toast.classList.remove('show'), ms || 4200);
+  }
+
+  function setBootStatus(msg){ if (els.boot) els.boot.textContent = msg; }
+
+  function setLive(text, kind){
+    els.liveText.textContent = text;
+    els.live.classList.remove('is-on','is-warn','is-off');
+    if (kind) els.live.classList.add(kind);
+  }
+
+  function setMode(mode, now){
+    if (mode === faceMode) { syncModeBar(); return; }
+    faceMode = mode;
+    faceModeAt = now || performance.now();
+    modeCand = null;
+    syncModeBar();
+  }
+
+  function syncModeBar(){
+    [...els.modeBar.querySelectorAll('span[data-mode]')].forEach(el => {
+      el.classList.toggle('is-on', el.dataset.mode === faceMode);
+    });
+    if (els.modeNote){
+      els.modeNote.textContent = forcedMode
+        ? 'Manual · 0'
+        : (faceMode === 'AMBIENT' ? '漂流 · 等待人脸' : 'Auto');
+    }
+  }
+
+  // ---------------------------------------------------------------- anchors
+  function cloneAnchors(a){ return JSON.parse(JSON.stringify(a)); }
+
+  function buildAnchors(lms){
+    const fit = getFit();
+    const pts = lms.map(lm => ({
+      x: fit.ox + (1 - lm.x) * fit.dw,
+      y: fit.oy + lm.y * fit.dh
+    }));
+    const P = i => pts[i] || pts[0];
+    const d = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+    const mid = (a,b) => ({ x:(a.x+b.x)/2, y:(a.y+b.y)/2 });
+    const avg = arr => {
+      let x=0,y=0; for (const p of arr){ x+=p.x; y+=p.y; }
+      return { x:x/arr.length, y:y/arr.length };
+    };
+
+    const eyeA = {
+      c: pts[468] || avg([P(33),P(133),P(159),P(145)]),
+      outer: P(33), inner: P(133), up: P(159), lo: P(145),
+      w: Math.max(12, d(P(33),P(133))), h: Math.max(4, d(P(159),P(145)))
+    };
+    const eyeB = {
+      c: pts[473] || avg([P(362),P(263),P(386),P(374)]),
+      outer: P(263), inner: P(362), up: P(386), lo: P(374),
+      w: Math.max(12, d(P(362),P(263))), h: Math.max(4, d(P(386),P(374)))
+    };
+    const mouth = {
+      c: mid(P(13),P(14)),
+      left: P(61), right: P(291),
+      top: P(0), bottom: P(17),
+      w: Math.max(16, d(P(61),P(291))),
+      open: d(P(13),P(14))
+    };
+    const nose = {
+      bridge: P(168), tip: P(4), base: P(2),
+      path: resample([P(168),P(6),P(197),P(195),P(5),P(4),P(2)], 28)
+    };
+    const browA = resample([P(70),P(63),P(105),P(66),P(107)], 14);
+    const browB = resample([P(336),P(296),P(334),P(293),P(300)], 14);
+    const oval = resample(FACE_OVAL.map(i => P(i)), 96, true);
+
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    for (const p of oval){
+      if (p.x<minX) minX=p.x; if (p.x>maxX) maxX=p.x;
+      if (p.y<minY) minY=p.y; if (p.y>maxY) maxY=p.y;
+    }
+    return {
+      eyeA, eyeB, mouth, nose, browA, browB, oval,
+      bounds:{ x:minX, y:minY, w:maxX-minX, h:maxY-minY }
+    };
+  }
+
+  function mixAnchors(dst, src, k){
+    mixP(dst.eyeA.c, src.eyeA.c, k);
+    mixP(dst.eyeA.outer, src.eyeA.outer, k);
+    mixP(dst.eyeA.inner, src.eyeA.inner, k);
+    mixP(dst.eyeA.up, src.eyeA.up, k);
+    mixP(dst.eyeA.lo, src.eyeA.lo, k);
+    mixP(dst.eyeB.c, src.eyeB.c, k);
+    mixP(dst.eyeB.outer, src.eyeB.outer, k);
+    mixP(dst.eyeB.inner, src.eyeB.inner, k);
+    mixP(dst.eyeB.up, src.eyeB.up, k);
+    mixP(dst.eyeB.lo, src.eyeB.lo, k);
+    dst.eyeA.w = mix(dst.eyeA.w, src.eyeA.w, k);
+    dst.eyeA.h = mix(dst.eyeA.h, src.eyeA.h, k);
+    dst.eyeB.w = mix(dst.eyeB.w, src.eyeB.w, k);
+    dst.eyeB.h = mix(dst.eyeB.h, src.eyeB.h, k);
+    mixP(dst.mouth.c, src.mouth.c, k);
+    mixP(dst.mouth.left, src.mouth.left, k);
+    mixP(dst.mouth.right, src.mouth.right, k);
+    mixP(dst.mouth.top, src.mouth.top, k);
+    mixP(dst.mouth.bottom, src.mouth.bottom, k);
+    dst.mouth.w = mix(dst.mouth.w, src.mouth.w, k);
+    dst.mouth.open = mix(dst.mouth.open, src.mouth.open, k);
+    mixP(dst.nose.bridge, src.nose.bridge, k);
+    mixP(dst.nose.tip, src.nose.tip, k);
+    mixP(dst.nose.base, src.nose.base, k);
+    for (let i=0;i<dst.nose.path.length;i++) mixP(dst.nose.path[i], src.nose.path[i], k);
+    for (let i=0;i<dst.browA.length;i++) mixP(dst.browA[i], src.browA[i], k);
+    for (let i=0;i<dst.browB.length;i++) mixP(dst.browB[i], src.browB[i], k);
+    for (let i=0;i<dst.oval.length;i++) mixP(dst.oval[i], src.oval[i], k);
+    dst.bounds.x = mix(dst.bounds.x, src.bounds.x, k);
+    dst.bounds.y = mix(dst.bounds.y, src.bounds.y, k);
+    dst.bounds.w = mix(dst.bounds.w, src.bounds.w, k);
+    dst.bounds.h = mix(dst.bounds.h, src.bounds.h, k);
+  }
+
+  function extractBS(cats){
+    const m = {};
+    for (const c of cats) m[c.categoryName] = c.score;
+    return {
+      jaw:    m.jawOpen || 0,
+      funnel: m.mouthFunnel || 0,
+      pucker: m.mouthPucker || 0,
+      smile:  Math.max(m.mouthSmileLeft || 0, m.mouthSmileRight || 0),
+      blink:  Math.min(m.eyeBlinkLeft || 0, m.eyeBlinkRight || 0),
+      wide:   Math.min(m.eyeWideLeft || 0, m.eyeWideRight || 0),
+      brow:   m.browInnerUp || 0
+    };
+  }
+
+  function eyeBlendScore(){
+    // a raised brow alone is already a "surprised" face; wide eyes reinforce it
+    return Math.max(bs.brow * 1.15, bs.wide * 1.25);
+  }
+
+  // ---------------------------------------------------------------- orb
+  class Orb {
+    constructor(group, index, localU, globalU){
+      this.group = group;
+      this.index = index;
+      this.u = localU;
+      this.gu = globalU;
+      this.rand = Math.random();
+      this.phase = Math.random() * Math.PI * 2;
+      this.jitter = Math.random() * 2 - 1;
+      this.alphaMul = 0.62 + Math.random() * 0.38;
+      this.spin = (Math.random() * 2 - 1) * 0.35;
+      this.gap = (0.10 + Math.random() * 0.30) * Math.PI * 2;
+      this.rot = Math.random() * Math.PI * 2;
+
+      this.x = Math.random() * width;
+      this.y = Math.random() * height;
+      this.vx = 0;
+      this.vy = 0;
+      this.tx = this.x;
+      this.ty = this.y;
+
+      this.r = 4 + Math.random() * 9;
+      this.alpha = 0;
+      this.tR = this.r;
+      this.tAlpha = 1;
+
+      this.driftA = Math.random() * Math.PI * 2;
+      this.driftSpeed = 10 + Math.random() * 22;
+      this.ambientR = 5 + Math.random() * 15;
+      this.ambientAlpha = 0.22 + Math.random() * 0.34;
+      this.ambientSpin = (Math.random() * 2 - 1) * 0.25;
+
+      const base = group === 'eyeA' || group === 'eyeB' ? PAL.gold
+        : group === 'mouth' ? PAL.ember
+        : group === 'nose' ? PAL.cream
+        : group === 'oval' ? PAL.lav
+        : PAL.peach;
+      this.ambientRGB = mixRGB(base, PAL.mauve, Math.random() * 0.55);
+      this.rgb = this.ambientRGB.slice();
+      this.trgb = this.rgb;
+      this.tRot = this.rot;
+    }
+
+    target(t){
+      const s = face.s;
+      if (!s) return;
+      const fw = s.bounds.w;
+      const fs = clamp01((fw / 420 - 0.6) / 0.9) * 0.9 + 0.6; // 0.6 .. 1.5
+      let tx = this.x, ty = this.y, tr = this.r, ta = this.tAlpha, rgb = this.trgb, rot = this.tRot;
+
+      if (faceMode === 'RING'){
+        const R = Math.max(30, s.mouth.w * 0.56) + bs.jaw * fw * 0.27 + Math.sin(t * 2.3) * 2;
+        const a = this.gu * Math.PI * 2 + t * 0.14;
+        const rr = R + this.jitter * 2.4;
+        tx = s.mouth.c.x + Math.cos(a) * rr;
+        ty = s.mouth.c.y + Math.sin(a) * rr;
+        tr = (2.5 + this.rand * 1.5) * fs;
+        ta = 0.98;
+        rgb = mixRGB(AMBER, ROSE, (this.gu * 0.9 + 0.05) % 1);
+        rot = a;
+      } else if (faceMode === 'SMILE'){
+        const A = s.mouth.left, B = s.mouth.right;
+        // follow the actual lower lip so the crescent scales with the face
+        const midY = (A.y + B.y) * 0.5;
+        const depth = Math.max(4, s.mouth.bottom.y - midY) + bs.smile * fw * 0.012;
+        const uu = -0.02 + this.gu * 1.04;
+        const su = Math.sin(Math.PI * clamp01(uu));
+        tx = mix(A.x, B.x, uu) + this.jitter * 1.3;
+        ty = mix(A.y, B.y, uu) + su * depth + this.jitter * 0.9 + Math.sin(t * 1.5 + uu * 6) * 1.1;
+        tr = (2.1 + this.rand * 1.2) * fs;
+        ta = 0.94;
+        rgb = mixRGB(EMBER, ROSE, clamp01(uu * 0.9 + 0.05));
+        rot = Math.atan2(B.y - A.y, B.x - A.x) + Math.PI * 0.5;
+      } else if (faceMode === 'BLINK'){
+        const eye = this.gu < 0.5 ? s.eyeA : s.eyeB;
+        const uu = (this.gu * 2) % 1;
+        // a single lid line drawn a little past both eye corners
+        const ext = -0.22 + uu * 1.44;
+        tx = mix(eye.outer.x, eye.inner.x, ext) + this.jitter * 0.5;
+        ty = mix(eye.outer.y, eye.inner.y, ext) + Math.sin(Math.PI * clamp01(ext)) * eye.w * 0.03 + this.jitter * 0.5;
+        tr = (1.3 + this.rand * 0.9) * fs;
+        ta = 0.80;
+        rgb = mixRGB(GOLD, CREAM, this.rand * 0.7);
+      } else if (faceMode === 'KISS'){
+        const inner = this.gu < 0.6;
+        const uu = inner ? this.gu / 0.6 : (this.gu - 0.6) / 0.4;
+        const base = Math.max(10, s.mouth.w * 0.24) * (1 + 0.055 * Math.sin(t * 5));
+        const R = inner ? base : base * 1.75;
+        const a = uu * Math.PI * 2 + t * (inner ? 0.45 : -0.28);
+        tx = s.mouth.c.x + Math.cos(a) * R;
+        ty = s.mouth.c.y + Math.sin(a) * R * 0.9;
+        tr = (2.1 + this.rand * 1.2) * fs;
+        ta = inner ? 0.96 : 0.58;
+        rgb = inner ? mixRGB(ROSE, EMBER, this.rand) : EMBER;
+      } else if (faceMode === 'AWE'){
+        const b = s.bounds;
+        const cx = b.x + b.w * 0.5, cy = b.y + b.h * 0.5;
+        const tilt = Math.atan2(s.eyeB.c.y - s.eyeA.c.y, s.eyeB.c.x - s.eyeA.c.x);
+        const rx = b.w * 0.64 * (1 + 0.02 * Math.sin(t * 2.0));
+        const ry = b.h * 0.58 * (1 + 0.02 * Math.sin(t * 2.0));
+        const a = this.gu * Math.PI * 2 + t * 0.30;
+        const x0 = Math.cos(a) * rx, y0 = Math.sin(a) * ry;
+        tx = cx + x0 * Math.cos(tilt) - y0 * Math.sin(tilt);
+        ty = cy + x0 * Math.sin(tilt) + y0 * Math.cos(tilt);
+        tr = (2.1 + this.rand * 1.3) * fs;
+        ta = 0.82;
+        rgb = this.rand > 0.87 ? GOLD : mixRGB(LAV, PERI, this.rand);
+      } else if (this.group === 'eyeA' || this.group === 'eyeB'){
+        const e = this.group === 'eyeA' ? s.eyeA : s.eyeB;
+        const dir = this.group === 'eyeA' ? 1 : -1;
+        const a = this.u * Math.PI * 2 + t * 0.20 * dir;
+        const rx = e.w * 0.60, ry = Math.max(7, e.w * 0.41);
+        tx = e.c.x + Math.cos(a) * rx;
+        ty = e.c.y + Math.sin(a) * ry;
+        tr = (2.1 + this.rand * 1.3) * fs;
+        ta = 0.95;
+        rgb = mixRGB(GOLD, AMBER, this.rand * 0.7);
+      } else if (this.group === 'mouth'){
+        const a = this.u * Math.PI * 2 - t * 0.18;
+        const rx = s.mouth.w * 0.64;
+        const ry = Math.max(6, s.mouth.w * 0.15 + s.mouth.open * 0.20);
+        tx = s.mouth.c.x + Math.cos(a) * rx;
+        ty = s.mouth.c.y + Math.sin(a) * ry;
+        tr = (2.2 + this.rand * 1.2) * fs;
+        ta = 0.9;
+        rgb = mixRGB(EMBER, ROSE, this.rand * 0.8);
+      } else if (this.group === 'nose'){
+        const p = samplePath(s.nose.path, this.u);
+        tx = p.x + this.jitter * 0.9;
+        ty = p.y;
+        tr = (1.7 + this.rand * 1.0) * fs;
+        ta = 0.55;
+        rgb = CREAM;
+      } else if (this.group === 'browA' || this.group === 'browB'){
+        const p = samplePath(this.group === 'browA' ? s.browA : s.browB, this.u);
+        tx = p.x;
+        ty = p.y - 2 * fs + this.jitter * 0.6;
+        tr = (1.6 + this.rand * 0.9) * fs;
+        ta = 0.48;
+        rgb = PAL.peach;
+      } else {
+        const p = samplePath(s.oval, this.u, true);
+        const b = s.bounds;
+        const cx = b.x + b.w * 0.5, cy = b.y + b.h * 0.5;
+        const dx = p.x - cx, dy = p.y - cy;
+        const len = Math.max(1, Math.hypot(dx, dy));
+        tx = p.x + dx / len * 2.8;
+        ty = p.y + dy / len * 2.8;
+        tr = (1.6 + this.rand * 1.1) * fs;
+        ta = 0.50;
+        rgb = mixRGB(LAV, PAL.mauve, this.rand * 0.6);
+      }
+
+      this.tx = tx;
+      this.ty = ty;
+      this.tR = tr;
+      this.tAlpha = ta;
+      this.trgb = rgb;
+      this.tRot = rot;
+    }
+
+    update(dt, t, faceActive){
+      if (faceActive){
+        const stiff = 22 + this.rand * 9;
+        this.vx += (this.tx - this.x) * stiff * dt;
+        this.vy += (this.ty - this.y) * stiff * dt;
+        const damp = Math.exp(-dt * 6.4);
+        this.vx *= damp;
+        this.vy *= damp;
+        const speed = Math.hypot(this.vx, this.vy);
+        if (speed > 2600){
+          this.vx *= 2600 / speed;
+          this.vy *= 2600 / speed;
+        }
+      } else {
+        this.driftA += (noise(this.phase, t * 0.055) - 0.5) * dt * 1.1;
+        const wantX = Math.cos(this.driftA) * this.driftSpeed;
+        const wantY = Math.sin(this.driftA) * this.driftSpeed;
+        const ease = Math.min(1, dt * 0.9);
+        this.vx += (wantX - this.vx) * ease;
+        this.vy += (wantY - this.vy) * ease;
+      }
+
+      this.x += this.vx * dt;
+      this.y += this.vy * dt;
+
+      if (!faceActive){
+        const m = 60;
+        if (this.x < -m) this.x = width + m;
+        else if (this.x > width + m) this.x = -m;
+        if (this.y < -m) this.y = height + m;
+        else if (this.y > height + m) this.y = -m;
+      }
+
+      const targetA = faceActive ? this.tAlpha * this.alphaMul : this.ambientAlpha;
+      const targetR = faceActive ? this.tR : this.ambientR;
+      const targetRotSpeed = faceActive ? 0.22 : this.ambientSpin;
+      this.alpha += (targetA - this.alpha) * Math.min(1, dt * 4.2);
+      this.r += (targetR - this.r) * Math.min(1, dt * 4.6);
+      this.rot += targetRotSpeed * dt;
+      this.spin += (targetRotSpeed - this.spin) * Math.min(1, dt * 1.5);
+
+      const col = faceActive ? this.trgb : this.ambientRGB;
+      this.rgb[0] += (col[0] - this.rgb[0]) * Math.min(1, dt * 3.4);
+      this.rgb[1] += (col[1] - this.rgb[1]) * Math.min(1, dt * 3.4);
+      this.rgb[2] += (col[2] - this.rgb[2]) * Math.min(1, dt * 3.4);
+    }
+  }
+
+  // ---------------------------------------------------------------- p5
+  function setup(){
+    const cnv = createCanvas(windowWidth, windowHeight);
+    pixelDensity(Math.min(2, window.devicePixelRatio || 1));
+    // p5 may nest the canvas inside an overlay element; keep it on <body> so it
+    // never inherits an overlay's visibility/display when that overlay closes.
+    if (cnv.elt.parentElement !== document.body) document.body.appendChild(cnv.elt);
+    cnv.style('position', 'fixed');
+    cnv.style('left', '0');
+    cnv.style('top', '0');
+    cnv.style('z-index', '1');
+    cnv.style('visibility', 'visible');
+    cnv.style('display', 'block');
+    noiseDetail(3, 0.5);
+    buildDust();
+    buildOrbs();
+    initUI();
+    bootReadyAt = performance.now();
+    if (STILL_URL){
+      startStill(STILL_URL);
+    } else {
+      setBootStatus('准备好了。点击「开启摄像头」开始。');
+    }
+    lastFrame = performance.now();
+  }
+
+  function buildDust(){
+    dust = [];
+    const n = Math.round((width * height) / 16000);
+    for (let i=0;i<n;i++){
+      dust.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        r: 0.4 + Math.random() * 1.5,
+        ph: Math.random() * Math.PI * 2,
+        sp: 0.3 + Math.random() * 0.9,
+        drift: 1.5 + Math.random() * 7,
+        big: Math.random() < 0.06
+      });
+    }
+  }
+
+  function buildOrbs(){
+    orbs = [];
+    let idx = 0;
+    for (const g of GROUP_DEF){
+      for (let i=0;i<g.n;i++){
+        const localU = (i + 0.5) / g.n;
+        const globalU = (idx + 0.5) / N_ORBS;
+        orbs.push(new Orb(g.key, idx, localU, globalU));
+        idx++;
+      }
+    }
+  }
+
+  function draw(){
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - lastFrame) / 1000 || 0.016);
+    lastFrame = now;
+    fps += ((1 / Math.max(dt, 0.001)) - fps) * 0.05;
+    const t = now / 1000;
+
+    clear();
+    tickVision(now);
+    processVision(now, dt);
+    updateFace(now, dt);
+
+    const ctx = drawingContext;
+    if (ghostOn) drawGhost(ctx);
+
+    if (face.active && faceMode !== 'AMBIENT'){
+      for (const o of orbs) o.target(t);
+    }
+    const faceActive = face.active && faceMode !== 'AMBIENT';
+    for (const o of orbs) o.update(dt, t, faceActive);
+
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    drawAura(ctx);
+    drawDust(ctx, t, dt);
+    drawWeb(ctx);
+    drawOrbs(ctx);
+    ctx.restore();
+
+    if (meshOn) drawMesh(ctx);
+  }
+
+  function windowResized(){
+    resizeCanvas(windowWidth, windowHeight);
+    buildDust();
+    if (vision.video){
+      // keep particles inside the new canvas
+      for (const o of orbs){
+        if (!face.active){
+          o.x = Math.random() * width;
+          o.y = Math.random() * height;
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- vision
+  async function importBundle(){
+    let lastErr = null;
+    for (const url of [BUNDLE_LOCAL, BUNDLE_CDN]){
+      try {
+        const mod = await import(url);
+        if (mod && mod.FaceLandmarker) return mod;
+      } catch (err){
+        lastErr = err;
+        console.warn('[twilight] bundle unavailable:', url, err && err.message);
+      }
+    }
+    throw lastErr || new Error('tasks-vision unavailable');
+  }
+
+  async function createLandmarker(mod){
+    const attempts = [
+      { wasm: WASM_LOCAL, model: MODEL_LOCAL, delegate: 'GPU' },
+      { wasm: WASM_LOCAL, model: MODEL_LOCAL, delegate: 'CPU' },
+      { wasm: WASM_CDN,   model: MODEL_CDN,   delegate: 'GPU' },
+      { wasm: WASM_CDN,   model: MODEL_CDN,   delegate: 'CPU' }
+    ];
+    let lastErr = null;
+    for (const a of attempts){
+      try {
+        const fileset = await mod.FilesetResolver.forVisionTasks(a.wasm);
+        const lm = await mod.FaceLandmarker.createFromOptions(fileset, {
+          baseOptions: { modelAssetPath: a.model, delegate: a.delegate },
+          runningMode: 'VIDEO',
+          numFaces: 1,
+          outputFaceBlendshapes: true,
+          outputFacialTransformationMatrixes: false,
+          minFaceDetectionConfidence: 0.5,
+          minFacePresenceConfidence: 0.5,
+          minTrackingConfidence: 0.5
+        });
+        console.info('[twilight] face engine ready:', a.delegate, a.model);
+        return lm;
+      } catch (err){
+        lastErr = err;
+        console.warn('[twilight] engine attempt failed:', a.delegate, a.model, err && err.message);
+      }
+    }
+    throw lastErr || new Error('face engine unavailable');
+  }
+
+  function ensureModel(){
+    if (vision.landmarker) return Promise.resolve(true);
+    if (vision.loading) return vision.loading;
+    vision.loading = (async () => {
+      try {
+        setLive('Loading model', 'is-warn');
+        const mod = await importBundle();
+        vision.landmarker = await createLandmarker(mod);
+        vision.modelOK = true;
+        updateLiveFromState();
+        return true;
+      } catch (err){
+        console.error('[twilight] model failed:', err);
+        vision.modelOK = false;
+        setLive('No model', 'is-off');
+        return false;
+      }
+    })();
+    return vision.loading;
+  }
+
+  async function startCamera(){
+    if (vision.still) return false;
+    if (vision.stream) return true;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      vision.cameraError = '此浏览器不支持摄像头接口。';
+      setLive('No camera', 'is-off');
+      return false;
+    }
+    setLive('Requesting', 'is-warn');
+    try {
+      // Browsers can leave the permission prompt open indefinitely. Never let the
+      // whole piece hang behind it: after 11s fall through to the no-camera view.
+      let timedOut = false;
+      let timer = 0;
+      const request = navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 960 },
+          frameRate: { ideal: 30, max: 30 }
+        }
+      });
+      const stream = await Promise.race([
+        request,
+        new Promise(resolve => { timer = setTimeout(() => { timedOut = true; resolve(null); }, 11000); })
+      ]).finally(() => clearTimeout(timer));
+
+      if (!stream){
+        // If permission is granted later, do not leave a dangling camera on.
+        request.then(s => s.getTracks().forEach(t => t.stop())).catch(() => {});
+        vision.cameraDenied = true;
+        vision.cameraError = '仍在等待摄像头授权。请点地址栏的摄像头图标允许访问，或先用无摄像头预览。';
+        setLive('No camera', 'is-off');
+        return false;
+      }
+      const video = document.createElement('video');
+      video.playsInline = true;
+      video.muted = true;
+      video.autoplay = true;
+      video.setAttribute('muted', '');
+      video.srcObject = stream;
+      video.style.cssText = 'position:fixed;left:-8px;bottom:-8px;width:2px;height:2px;opacity:0;pointer-events:none;';
+      document.body.appendChild(video);
+      vision.stream = stream;
+      vision.video = video;
+      await new Promise(resolve => {
+        let done = false;
+        const finish = () => { if (!done){ done = true; resolve(); } };
+        video.addEventListener('loadedmetadata', () => {
+          video.play().then(finish).catch(finish);
+        }, { once:true });
+        video.addEventListener('loadeddata', finish, { once:true });
+        setTimeout(finish, 2600);
+      });
+      try { await video.play(); } catch (err) { /* autoplay muted should work */ }
+      vision.cameraDenied = false;
+      updateLiveFromState();
+      els.camToggle.classList.add('is-hidden');
+      return true;
+    } catch (err){
+      console.warn('[twilight] camera failed:', err);
+      vision.cameraError = err && err.name === 'NotAllowedError'
+        ? '摄像头权限被拒绝。你仍可以观看无摄像头版本。'
+        : err && err.name === 'NotFoundError'
+          ? '没有找到可用的摄像头。'
+          : '无法打开摄像头，已切换到无摄像头模式。';
+      vision.cameraDenied = true;
+      setLive('No camera', 'is-off');
+      return false;
+    }
+  }
+
+  function updateLiveFromState(){
+    if (vision.still){
+      setLive('Still image', 'is-on');
+    } else if (!vision.modelOK){
+      setLive(vision.modelOK === false && vision.loading ? 'Loading model' : 'Standby', 'is-warn');
+    } else if (vision.video && vision.video.readyState >= 2){
+      setLive('Live', 'is-on');
+    } else {
+      setLive('No camera', 'is-off');
+    }
+    const showCam = experienceStarted && !vision.still && !vision.video;
+    els.camToggle.classList.toggle('is-hidden', !showCam);
+    if (showCam && vision.modelOK){
+      els.camToggle.textContent = '◉ 开启摄像头';
+    }
+  }
+
+  function tickVision(now){
+    const v = vision.video;
+    if (!vision.landmarker || !v) return;
+    if (v.readyState < 2 || !v.videoWidth) return;
+    if (v.currentTime === vision.lastVideoTime) return;
+    if (now - vision.lastDetect < 30) return;
+    vision.lastDetect = now;
+    vision.lastVideoTime = v.currentTime;
+
+    let res;
+    try {
+      res = vision.landmarker.detectForVideo(v, now);
+    } catch (err){
+      vision.errors++;
+      if (vision.errors < 4) console.warn('[twilight] detect failed:', err);
+      if (vision.errors === 4){
+        toast('面部识别引擎出错，正在尝试继续运行。如果持续出现，请刷新页面。', 6000);
+      }
+      return;
+    }
+    vision.errors = Math.max(0, vision.errors - 1);
+    handleResult(res, now);
+  }
+
+  function handleResult(res, now){
+    const lms = res && res.faceLandmarks && res.faceLandmarks[0];
+    if (lms){
+      vision.latest = {
+        lms,
+        bs: (res.faceBlendshapes && res.faceBlendshapes[0] && res.faceBlendshapes[0].categories) || [],
+        at: now
+      };
+    } else {
+      vision.latest = { lms:null, bs:[], at: now };
+    }
+  }
+
+  function processVision(now){
+    const latest = vision.latest;
+    if (!latest || latest.at === processedAt) return;
+    processedAt = latest.at;
+    if (latest.lms){
+      const raw = buildAnchors(latest.lms);
+      if (!face.s) face.s = cloneAnchors(raw);
+      face.raw = raw;
+      face.ok = true;
+      face.lastSeen = now;
+      Object.assign(bsTarget, extractBS(latest.bs));
+      if (faceMode === 'AMBIENT'){
+        setMode(forcedMode && MODES.includes(forcedMode) ? forcedMode : 'REST', now);
+      }
+    } else {
+      face.ok = false;
+      Object.assign(bsTarget, { jaw:0, funnel:0, pucker:0, smile:0, blink:0, wide:0, brow:0 });
+    }
+  }
+
+  function updateFace(now, dt){
+    if (face.raw && face.s){
+      mixAnchors(face.s, face.raw, 1 - Math.exp(-dt * 20));
+    }
+    const visible = face.staticSource ? face.ok : (face.ok && now - face.lastSeen < 1100);
+
+    face.alpha += ((visible ? 1 : 0) - face.alpha) * (1 - Math.exp(-dt * (visible ? 4.5 : 2.6)));
+    face.active = !!face.s && face.alpha > 0.015;
+
+    for (const k of Object.keys(bs)){
+      const target = visible ? bsTarget[k] : 0;
+      bs[k] += (target - bs[k]) * (1 - Math.exp(-dt * 12));
+    }
+    if (visible && bs.blink > 0.62) blinkHoldAt = now;
+
+    if (!visible){
+      if (faceMode !== 'AMBIENT' && now - face.lastSeen > 950){
+        setMode('AMBIENT', now);
+      }
+      return;
+    }
+
+    if (forcedMode){
+      if (faceMode !== forcedMode) setMode(forcedMode, now);
+      return;
+    }
+    if (faceMode === 'AMBIENT') setMode('REST', now);
+    evaluateMode(now);
+  }
+
+  function evaluateMode(now){
+    const cur = faceMode;
+    const ring = Math.max(bs.jaw, bs.funnel * 0.92);
+    const blinkNow = Math.max(bs.blink, now - blinkHoldAt < 700 ? 0.9 : 0);
+    const tests = [
+      ['RING', ring, 0.33, 0.17],
+      ['KISS', bs.pucker, 0.46, 0.28],
+      ['SMILE', bs.smile, 0.32, 0.17],
+      ['BLINK', blinkNow, 0.55, 0.30],
+      ['AWE', eyeBlendScore(), 0.50, 0.30]
+    ];
+    let desired = 'REST';
+    for (const [id, score, enter, exit] of tests){
+      if (score > (cur === id ? exit : enter)) { desired = id; break; }
+    }
+
+    if (desired === cur){
+      modeCand = desired;
+      return;
+    }
+    if (modeCand !== desired){
+      modeCand = desired;
+      modeCandAt = now;
+      return;
+    }
+    if (now - modeCandAt > 130 && now - faceModeAt > 280){
+      setMode(desired, now);
+    }
+  }
+
+  // ---------------------------------------------------------------- still image
+  async function startStill(url){
+    experienceStarted = true;
+    dismissIntro();
+    showHud();
+    setBootStatus('');
+    setLive('Still image', 'is-on');
+    toast('静帧模式：正在载入人脸照片…');
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = async () => {
+      const maxW = 1280;
+      const scale = Math.min(1, maxW / img.naturalWidth);
+      const c = document.createElement('canvas');
+      c.width = Math.max(2, Math.round(img.naturalWidth * scale));
+      c.height = Math.max(2, Math.round(img.naturalHeight * scale));
+      const cx = c.getContext('2d');
+      cx.drawImage(img, 0, 0, c.width, c.height);
+      vision.still = img;
+      vision.stillCanvas = c;
+      face.staticSource = true;
+      const ok = await ensureModel();
+      if (!ok){
+        setLive('No model', 'is-off');
+        toast('面部模型加载失败。请确认 vendor/ 与 models/ 文件夹完整，或保持联网。', 7000);
+        return;
+      }
+      runStillDetection();
+    };
+    img.onerror = () => {
+      toast('无法载入静帧图片：' + url, 6000);
+      setLive('No image', 'is-off');
+      ensureModel();
+    };
+    img.src = url;
+  }
+
+  function runStillDetection(){
+    if (!vision.landmarker || !vision.stillCanvas) return;
+    try {
+      const res = vision.landmarker.detectForVideo(vision.stillCanvas, performance.now());
+      handleResult(res, performance.now());
+      vision.stillDetected = true;
+      setLive('Still image', 'is-on');
+      toast('静帧模式 · 按 1–6 查看每种表情编排');
+    } catch (err){
+      console.warn('[twilight] still detect failed, retry in IMAGE mode', err);
+      (async () => {
+        try {
+          await vision.landmarker.setOptions({ runningMode: 'IMAGE' });
+          const res = vision.landmarker.detect(vision.stillCanvas);
+          handleResult(res, performance.now());
+          vision.stillDetected = true;
+          toast('静帧模式 · 按 1–6 查看每种表情编排');
+        } catch (err2){
+          console.error('[twilight] still detect failed:', err2);
+          toast('这张图片里没有找到人脸，或引擎无法处理。', 6000);
+        }
+      })();
+    }
+  }
+
+  // ---------------------------------------------------------------- geometry / rendering
+  function getFit(){
+    let sw = 0, sh = 0;
+    if (vision.video && vision.video.videoWidth){
+      sw = vision.video.videoWidth;
+      sh = vision.video.videoHeight;
+    } else if (vision.stillCanvas){
+      sw = vision.stillCanvas.width;
+      sh = vision.stillCanvas.height;
+    }
+    if (!sw || !sh){ sw = 4; sh = 3; }
+    // On a narrow portrait screen a landscape webcam would leave huge empty
+    // bands, so fill the width and crop the sides instead of letterboxing.
+    const portrait = (width / height) < 0.95 && (sw / sh) > 1.15;
+    const s = portrait ? Math.max(width / sw, height / sh) : Math.min(width / sw, height / sh);
+    const dw = sw * s, dh = sh * s;
+    return { s, sw, sh, dw, dh, ox:(width - dw) / 2, oy:(height - dh) / 2 };
+  }
+
+  function setupGhostCanvas(sw, sh){
+    if (!sw || !sh) return;
+    const gw = 480;
+    const gh = Math.max(120, Math.round(gw * sh / sw));
+    if (vision.ghostCanvas && vision.ghostW === gw && vision.ghostH === gh) return;
+    const c = document.createElement('canvas');
+    c.width = gw; c.height = gh;
+    vision.ghostCanvas = c;
+    vision.ghostCtx = c.getContext('2d');
+    vision.ghostW = gw;
+    vision.ghostH = gh;
+  }
+
+  function drawGhost(ctx){
+    const src = vision.video && vision.video.readyState >= 2 ? vision.video : vision.still;
+    if (!src) return;
+    const sw = vision.video && vision.video.videoWidth ? vision.video.videoWidth : vision.stillCanvas.width;
+    const sh = vision.video && vision.video.videoHeight ? vision.video.videoHeight : vision.stillCanvas.height;
+    if (!sw || !sh) return;
+    setupGhostCanvas(sw, sh);
+    const gc = vision.ghostCtx;
+    const gw = vision.ghostW, gh = vision.ghostH;
+
+    gc.clearRect(0, 0, gw, gh);
+    gc.save();
+    gc.translate(gw, 0);
+    gc.scale(-1, 1);
+    gc.filter = 'grayscale(1) sepia(0.34) saturate(1.4) contrast(1.06) brightness(0.84)';
+    gc.drawImage(src, 0, 0, gw, gh);
+    gc.restore();
+    gc.filter = 'none';
+
+    // Feathered frame: radial vignette first, then soft horizontal / vertical edges,
+    // so the camera never reads as a hard pasted rectangle.
+    gc.globalCompositeOperation = 'destination-in';
+    const rg = gc.createRadialGradient(gw * 0.5, gh * 0.46, gh * 0.10, gw * 0.5, gh * 0.46, gh * 0.74);
+    rg.addColorStop(0, 'rgba(0,0,0,1)');
+    rg.addColorStop(0.55, 'rgba(0,0,0,0.72)');
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    gc.fillStyle = rg;
+    gc.fillRect(0, 0, gw, gh);
+
+    const lg = gc.createLinearGradient(0, 0, gw, 0);
+    lg.addColorStop(0, 'rgba(0,0,0,0)');
+    lg.addColorStop(0.13, 'rgba(0,0,0,1)');
+    lg.addColorStop(0.87, 'rgba(0,0,0,1)');
+    lg.addColorStop(1, 'rgba(0,0,0,0)');
+    gc.fillStyle = lg;
+    gc.fillRect(0, 0, gw, gh);
+
+    const vg = gc.createLinearGradient(0, 0, 0, gh);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(0.10, 'rgba(0,0,0,1)');
+    vg.addColorStop(0.92, 'rgba(0,0,0,1)');
+    vg.addColorStop(1, 'rgba(0,0,0,0)');
+    gc.fillStyle = vg;
+    gc.fillRect(0, 0, gw, gh);
+    gc.globalCompositeOperation = 'source-over';
+
+    const fit = getFit();
+    ctx.save();
+    ctx.globalAlpha = vision.still ? 0.44 : 0.26;
+    ctx.drawImage(vision.ghostCanvas, fit.ox, fit.oy, fit.dw, fit.dh);
+    ctx.restore();
+  }
+
+  function drawDust(ctx, t, dt){
+    for (const d of dust){
+      d.y -= d.drift * dt;
+      if (d.y < -6){ d.y = height + 6; d.x = Math.random() * width; }
+      const tw = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * d.sp + d.ph));
+      ctx.globalAlpha = tw * 0.55;
+      ctx.fillStyle = '#ffe6c8';
+      ctx.beginPath();
+      if (d.big){
+        ctx.fillRect(d.x, d.y, 1.6, 1.6);
+        ctx.globalAlpha = tw * 0.18;
+        ctx.fillRect(d.x - 4, d.y + 0.6, 9, 0.4);
+        ctx.fillRect(d.x + 0.6, d.y - 4, 0.4, 9);
+      } else {
+        ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawAura(ctx){
+    if (!face.active || !face.s) return;
+    const b = face.s.bounds;
+    const cx = b.x + b.w * 0.5, cy = b.y + b.h * 0.5;
+    const R = Math.max(b.w, b.h) * 0.78;
+    if (R < 1) return;
+    const g = ctx.createRadialGradient(cx, cy, R * 0.08, cx, cy, R);
+    g.addColorStop(0, 'rgba(255,170,105,0.120)');
+    g.addColorStop(0.42, 'rgba(255,135,110,0.055)');
+    g.addColorStop(1, 'rgba(255,120,100,0)');
+    ctx.globalAlpha = face.alpha;
+    ctx.fillStyle = g;
+    ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+    ctx.globalAlpha = 1;
+  }
+
+  function orderedOrbs(list){
+    return list.slice().sort((a,b) => a.gu - b.gu);
+  }
+
+  function drawWeb(ctx){
+    if (!face.active || faceMode === 'AMBIENT' || face.alpha < 0.04) return;
+    const groups = [];
+    const all = orderedOrbs(orbs);
+    const byGroup = {};
+    for (const o of orbs){
+      (byGroup[o.group] || (byGroup[o.group] = [])).push(o);
+    }
+    for (const k of Object.keys(byGroup)) byGroup[k].sort((a,b) => a.u - b.u);
+
+    if (faceMode === 'RING'){
+      groups.push({ list: all, closed:true, color:'255,214,165', alpha:0.11 });
+    } else if (faceMode === 'SMILE'){
+      groups.push({ list: all, closed:false, color:'255,190,150', alpha:0.12 });
+    } else if (faceMode === 'AWE'){
+      groups.push({ list: all, closed:true, color:'190,175,255', alpha:0.09 });
+    } else if (faceMode === 'BLINK'){
+      const a = orbs.filter(o => o.gu < 0.5).sort((x,y) => x.gu - y.gu);
+      const b = orbs.filter(o => o.gu >= 0.5).sort((x,y) => x.gu - y.gu);
+      groups.push({ list:a, closed:false, color:'255,210,150', alpha:0.13 });
+      groups.push({ list:b, closed:false, color:'255,210,150', alpha:0.13 });
+    } else if (faceMode === 'REST'){
+      groups.push({ list:byGroup.eyeA || [], closed:true, color:'255,205,140', alpha:0.10 });
+      groups.push({ list:byGroup.eyeB || [], closed:true, color:'255,205,140', alpha:0.10 });
+      groups.push({ list:byGroup.mouth || [], closed:true, color:'255,170,140', alpha:0.09 });
+      groups.push({ list:byGroup.oval || [], closed:true, color:'185,165,255', alpha:0.055 });
+    }
+
+    ctx.save();
+    ctx.lineWidth = 0.7;
+    for (const g of groups){
+      if (!g.list.length) continue;
+      ctx.globalAlpha = g.alpha * face.alpha;
+      ctx.strokeStyle = 'rgba(' + g.color + ',1)';
+      ctx.beginPath();
+      ctx.moveTo(g.list[0].x, g.list[0].y);
+      for (let i=1;i<g.list.length;i++) ctx.lineTo(g.list[i].x, g.list[i].y);
+      if (g.closed) ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawOrbs(ctx){
+    ctx.save();
+    ctx.lineCap = 'round';
+    for (const o of orbs){
+      const a = o.alpha;
+      if (a < 0.008) continue;
+      const r = Math.max(0.6, o.r);
+      ctx.strokeStyle = rgbStr(o.rgb);
+
+      ctx.globalAlpha = a * 0.085;
+      ctx.lineWidth = Math.max(1.5, r * 1.9);
+      ctx.beginPath();
+      ctx.arc(o.x, o.y, r * 1.75, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.globalAlpha = a * 0.9;
+      ctx.lineWidth = Math.max(0.7, r * 0.34);
+      ctx.beginPath();
+      const gap = Math.min(o.gap, Math.PI * 1.7);
+      ctx.arc(o.x, o.y, r, o.rot, o.rot + Math.PI * 2 - gap);
+      ctx.stroke();
+
+      if (r < 7){
+        ctx.globalAlpha = a * 0.45;
+        ctx.fillStyle = rgbStr(o.rgb);
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, Math.max(0.5, r * 0.28), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawMesh(ctx){
+    const lms = vision.latest && vision.latest.lms;
+    if (!lms) return;
+    const fit = getFit();
+    ctx.save();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = 'rgba(255,225,190,0.62)';
+    for (const lm of lms){
+      const x = fit.ox + (1 - lm.x) * fit.dw;
+      const y = fit.oy + lm.y * fit.dh;
+      ctx.fillRect(x - 0.7, y - 0.7, 1.4, 1.4);
+    }
+    if (face.s){
+      ctx.strokeStyle = 'rgba(255,210,170,0.30)';
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      const oval = face.s.oval;
+      ctx.moveTo(oval[0].x, oval[0].y);
+      for (let i=1;i<oval.length;i++) ctx.lineTo(oval[i].x, oval[i].y);
+      ctx.closePath();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ---------------------------------------------------------------- export
+  function savePoster(){
+    const cnv = document.querySelector('canvas');
+    if (!cnv) return;
+    const w = cnv.width, h = cnv.height;
+    const out = document.createElement('canvas');
+    out.width = w; out.height = h;
+    const ctx = out.getContext('2d');
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#161936');
+    g.addColorStop(0.24, '#221e47');
+    g.addColorStop(0.55, '#452d5b');
+    g.addColorStop(0.79, '#7d3a5f');
+    g.addColorStop(1, '#b15253');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
+    const sun = ctx.createRadialGradient(w * 0.74, h * 0.66, 0, w * 0.74, h * 0.66, Math.max(w, h) * 0.55);
+    sun.addColorStop(0, 'rgba(255,152,92,0.24)');
+    sun.addColorStop(0.45, 'rgba(255,140,90,0.10)');
+    sun.addColorStop(1, 'rgba(255,140,90,0)');
+    ctx.fillStyle = sun;
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(cnv, 0, 0);
+
+    out.toBlob(blob => {
+      if (!blob) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'twilight-faces-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.png';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      toast('已保存当前画面');
+    }, 'image/png');
+  }
+
+  // ---------------------------------------------------------------- ui
+  function initUI(){
+    syncModeBar();
+    els.modeBar.querySelectorAll('span[data-mode]').forEach(el => {
+      el.style.pointerEvents = 'auto';
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', () => {
+        forcedMode = el.dataset.mode;
+        setMode(forcedMode, performance.now());
+        syncModeBar();
+        toast('手动编排：' + forcedMode + '（按 0 恢复自动）');
+      });
+    });
+
+    if (FORCED_PARAM && MODES.includes(FORCED_PARAM)){
+      forcedMode = FORCED_PARAM;
+      setMode(forcedMode, performance.now());
+    }
+
+    els.enter.addEventListener('click', () => enterExperience(true));
+    els.skip.addEventListener('click', () => {
+      if (startInFlight){
+        // Let people bail out while the browser's permission prompt is still open.
+        skipRequested = true;
+        experienceStarted = true;
+        dismissIntro();
+        showHud();
+        ensureModel();
+        updateLiveFromState();
+        toast('无摄像头预览 · 按 C 可随时开启摄像头', 4800);
+        return;
+      }
+      enterExperience(false);
+    });
+    els.camToggle.addEventListener('click', async () => {
+      if (!vision.modelOK){
+        const ok = await ensureModel();
+        if (!ok) { toast('面部模型尚未就绪。', 4000); return; }
+      }
+      const ok = await startCamera();
+      if (ok){
+        toast('摄像头已开启');
+        updateLiveFromState();
+      } else {
+        toast(vision.cameraError || '无法打开摄像头。', 5000);
+      }
+    });
+
+    window.addEventListener('keydown', e => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key;
+      if (k === 'v' || k === 'V'){
+        ghostOn = !ghostOn;
+        toast(ghostOn ? '摄像头影像：开' : '摄像头影像：关');
+      } else if (k === 'm' || k === 'M'){
+        meshOn = !meshOn;
+        toast(meshOn ? '面部网格：开' : '面部网格：关');
+      } else if (k === 'h' || k === 'H'){
+        hudOn = !hudOn;
+        els.hud.style.opacity = hudOn ? '' : '0';
+        els.hud.style.pointerEvents = hudOn ? '' : 'none';
+      } else if (k === 's' || k === 'S'){
+        savePoster();
+      } else if (k === 'c' || k === 'C'){
+        if (!vision.video) els.camToggle.click();
+      } else if (k === '0' || k === 'Escape'){
+        forcedMode = null;
+        syncModeBar();
+        toast('已恢复自动表情识别');
+      } else if (/^[1-6]$/.test(k)){
+        forcedMode = MODES[parseInt(k, 10) - 1];
+        setMode(forcedMode, performance.now());
+        syncModeBar();
+        toast('手动编排：' + forcedMode + '（按 0 恢复自动）');
+      }
+    });
+
+    setTimeout(() => {
+      if (!bootReadyAt){
+        setBootStatus('p5.js 未能加载，请检查 vendor/p5/p5.min.js。');
+      }
+    }, 5000);
+  }
+
+  function dismissIntro(){
+    els.intro.classList.add('is-gone');
+    setTimeout(() => { els.intro.style.display = 'none'; }, 1000);
+  }
+
+  function showHud(){
+    els.hud.classList.remove('is-hidden');
+  }
+
+  async function enterExperience(withCamera){
+    if (startInFlight) return;
+    startInFlight = true;
+    experienceStarted = true;
+    skipRequested = false;
+    els.enter.disabled = true;
+    els.enter.textContent = '正在唤醒…';
+
+    let camOk = false;
+    if (withCamera){
+      setBootStatus('正在请求摄像头权限…');
+      camOk = await startCamera();
+      if (skipRequested){ startInFlight = false; return; }
+      if (!camOk){
+        setBootStatus(vision.cameraError || '摄像头不可用，将以无摄像头模式进入。');
+      }
+    }
+
+    setBootStatus('正在加载面部模型（首次约 5–10 秒）…');
+    const modelOk = await ensureModel();
+
+    dismissIntro();
+    showHud();
+    if (!modelOk){
+      toast('面部模型加载失败，已进入无摄像头模式。请检查 vendor/ 与 models/ 文件夹，或联网后刷新。', 7000);
+    } else if (withCamera && !camOk){
+      toast(vision.cameraError || '摄像头不可用，已进入无摄像头模式。', 6000);
+    } else if (withCamera){
+      toast('识别中 · 按 V 隐藏摄像头影像 · 按 M 查看面部网格', 5200);
+    } else {
+      toast('无摄像头预览 · 按 C 可开启摄像头', 4800);
+    }
+    updateLiveFromState();
+    startInFlight = false;
+  }
+
+  function boot(){
+    if (STILL_URL) return;
+    setBootStatus('准备好了。点击「开启摄像头」开始。');
+  }
+
+  window.addEventListener('load', () => {
+    if (!bootReadyAt){
+      setTimeout(() => {
+        if (!bootReadyAt) setBootStatus('p5.js 未能加载，请检查 vendor/p5/p5.min.js。');
+      }, 1200);
+    }
+  });
+
+  // p5 runs in global mode: it looks for window.setup / window.draw.
+  // Everything above lives inside this closure, so publish the hooks here.
+  window.setup = setup;
+  window.draw = draw;
+  window.windowResized = windowResized;
+
+  // expose a tiny debug API (useful for recording / teaching)
+  window.TwilightFaces = {
+    setMode(m){
+      if (!MODES.includes(m)) return;
+      forcedMode = m;
+      setMode(m, performance.now());
+      syncModeBar();
+    },
+    auto(){ forcedMode = null; syncModeBar(); },
+    state(){ return { mode: faceMode, forced: forcedMode, face: face.ok, alpha: face.alpha, ghost: ghostOn, mesh: meshOn, bs: { ...bs } }; }
+  };
+})();
+</script>
+</body>
+</html>
